@@ -6,6 +6,7 @@ def analyze_spi_flash(verbose=False):
     '''
 
     from binascii import hexlify
+    from os import listdir
 
     def ktool_app_size(address):
         size = int.from_bytes(utils.flash_read(address+1, 4), 'little')
@@ -132,11 +133,12 @@ def analyze_spi_flash(verbose=False):
     
     # 0x300000 spiffs bytes at 0xD00000
     _size = 0x300000
-    be_verbose('ktool_sector', 'SPI Flash Filing System', hex(cursor), hex(cursor+_size))
+    be_verbose('ktool_sector', 'SPI Flash File System', hex(cursor), hex(cursor+_size))
+    be_verbose('listdir("/flash"): {}'.format(listdir('/flash')))
     _hash = hash_flash(cursor, _size, verbose=decremented_bool(verbose))
     if len(_hash) == 32:
          valid, bytes_read = True, _size
-    be_verbose('filesizehash', 'SPI Flash Filing System', _size, hexlify(_hash).decode())
+    be_verbose('filesizehash', 'SPI Flash File System', _size, hexlify(_hash).decode())
     assert valid and bytes_read, 'hashing SPIFFS'
     cursor += bytes_read
 
