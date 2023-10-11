@@ -59,7 +59,7 @@ def analyze_spi_flash(verbose=False):
     be_verbose('ktool_sector', 'main config', hex(cursor), hex(cursor+4096))
     _hash = hash_flash(cursor, 4096, verbose=decremented_bool(verbose))
     if len(_hash) == 32:
-         valid, bytes_read = True, 4096
+        valid, bytes_read = True, 4096
     be_verbose('filesizehash', 'config.bin', 4096, hexlify(_hash).decode())
     assert valid and bytes_read, 'hashing "main config"'
     cursor += bytes_read
@@ -68,7 +68,7 @@ def analyze_spi_flash(verbose=False):
     be_verbose('ktool_sector', 'backup config', hex(cursor), hex(cursor+4096))
     _other_hash = hash_flash(cursor, 4096, verbose=decremented_bool(verbose))
     if len(_hash) == 32:
-         valid, bytes_read = True, 4096
+        valid, bytes_read = True, 4096
     be_verbose('hashed', hex(cursor), hex(cursor+bytes_read), hexlify(_other_hash).decode())
     assert valid and bytes_read, 'hashing "backup config"'
     cursor += bytes_read
@@ -130,14 +130,14 @@ def analyze_spi_flash(verbose=False):
     be_verbose('validated', hex(cursor), hex(cursor+_size), 'all 0xff' if valid else 'NOT all 0xff!')
     assert valid and bytes_read, 'checking that "app/user" is unused'
     cursor += bytes_read
-    
+
     # 0x300000 spiffs bytes at 0xD00000
     _size = 0x300000
     be_verbose('ktool_sector', 'SPI Flash File System', hex(cursor), hex(cursor+_size))
     be_verbose('listdir("/flash"): {}'.format(listdir('/flash')))
     _hash = hash_flash(cursor, _size, verbose=decremented_bool(verbose))
     if len(_hash) == 32:
-         valid, bytes_read = True, _size
+        valid, bytes_read = True, _size
     be_verbose('filesizehash', 'SPI Flash File System', _size, hexlify(_hash).decode())
     assert valid and bytes_read, 'hashing SPIFFS'
     cursor += bytes_read

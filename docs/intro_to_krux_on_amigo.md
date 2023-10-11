@@ -33,10 +33,10 @@ Connecting to the console over usb.
 It's the small USB-C port at the bottom-center, (not the one at the bottom-left side).
 
 
-Use `screen` to connect; don't forget that `<ctrl>-a, k` is how to kill screen once inside.
+Use `minicom` to connect (`screen` works as well but is problematic with large pastes).
 
 ```
-screen /dev/ttyUSB1 115200
+minicom -D /dev/ttyUSB1 -b 115200
 ```
 
 If lucky, we might see this:
@@ -112,9 +112,9 @@ from machine import WDT
 WDT().stop()
 ```
 We need to complete that within 30s else the board will reset.  We have two choices, we can type fast enough,
-or we can use cut/paste (fast enough).
+or we can use copy/paste (fast enough).
 
-To cut/paste, we can put the REPL into 'paste-mode' w/ `<ctrl>-e` at an empty `>>>` prompt:
+To copy/paste, we can put the REPL into 'paste-mode' w/ `<ctrl>-e` at an empty `>>>` prompt:
 ```
 >>> <ctrl>-e
 paste mode; Ctrl-C to cancel, Ctrl-D to finish

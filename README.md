@@ -13,7 +13,7 @@ that has been saved on another computer.
 
 ## Tools in this repository
 
-The following tools may be cut/pasted into the k210 console w/`<CTRL>-e`, or they may be run on another computer
+The following tools may be copy/pasted into the k210 console w/`<CTRL>-e`, or they may be run on another computer
 against `/tmp/k210.flash_dump` assuming that file was previously saved from a k210 device.
 
 * [wdt_pause.py](./wdt_pause.py): 
