@@ -644,4 +644,58 @@ fe1000  ff ff ff ff  ff ff ff ff  ff ff ff ff  ff ff ff ff  |................|
 fffff0  ff ff ff ff  ff ff ff ff  ff ff ff ff  ff ff ff ff  |................|
 ```
 
-Todo: Knowing the key is 'abc' and having iterations and encryption mode, decrypt the mnemonic.  Perhaps another day?
+We can see our encrypted seed arouund 0xd18000 inside `seeds.json`:
+```json
+{
+  "f91a61f7": {
+    "key_iterations": 100000, 
+    "data": "yHLUrMve7UMVnX7kYm6sdct9inQVSubkZi0a30Y2WM8AedVr3ujg7GIYWw70LNPMK/mWy5ttieHp/IahqU9lPo926ebtr8jMnSwDJMpZ9h4=", 
+    "version": 0
+  }
+}
+```
+
+Knowing that our key was "abc", iterations were 100000, and mode was ECB, we can decrypt this seed.
+
+```python
+from ucryptolib import aes, MODE_ECB
+from hashlib import pbkdf2_hmac
+from binascii import a2b_base64
+
+# inputs
+super_secret_key = 'abc'
+label = 'f91a61f7'
+iterations = 100000
+b64data = 'yHLUrMve7UMVnX7kYm6sdct9inQVSubkZi0a30Y2WM8AedVr3ujg7GIYWw70LNPMK/mWy5ttieHp/IahqU9lPo926ebtr8jMnSwDJMpZ9h4='
+
+# setup decryption
+data = a2b_base64(b64data)
+stretched_key = pbkdf2_hmac('sha256', super_secret_key.encode(), label.encode(), iterations)
+aes = aes(stretched_key, MODE_ECB)
+
+# decrypt each 16-byte block
+answer = b''
+for i in range(0, len(data), 16):
+     answer += aes.decrypt(data[i:i+16])
+answer = answer.replace(b'\x00', b'')
+
+# output the inputs and the answer
+print('Inputs:\n key: {}\n label: {}\n iterations: {}\n data: {}'.format(
+    key, mnemonic_id, iterations, b64data
+))
+print('\nAnswer:\n {}'.format(answer))
+```
+... which will print the following output to the console.
+
+```
+Inputs:
+ key: abc
+ label: f91a61f7
+ iterations: 100000
+ data: yHLUrMve7UMVnX7kYm6sdct9inQVSubkZi0a30Y2WM8AedVr3ujg7GIYWw70LNPMK/mWy5ttieHp/IahqU9lPo926ebtr8jMnSwDJMpZ9h4=
+
+Answer:
+ b'acquire obvious bean still radar topple boss sting stock valid donkey melt'
+>>> 
+```
+
