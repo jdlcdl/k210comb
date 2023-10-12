@@ -126,9 +126,6 @@ If we don't use this special mode, the REPL will auto-indent our paste, leading 
 
 Krux documentation explains how to disable the WDT timer via a "config.json" file that gets stored to SPI Flash, so krux will know to disable the WDT next time it boots.  This way you can connect to the console, interrupt krux, and get to exploring.  I prefer to `WDT().stop()` each time so that nothing is written to flash, and so that the device would auto-reboot in the event of an application crash and no console access.
 
-If the 16MB SPI Flash memory interests you, see:
-[sipeed maix amigo tft: flash exploration](https://gist.github.com/jdlcdl/a01dbf21771516581b4ccfda49622293).
-
 ---
 
 Getting familiar with the REPL and krux.

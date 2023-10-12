@@ -84,3 +84,14 @@ have a good idea of where we want to inspect.
 
 See [hex_dump example](./docs/hex_dump_example.md)
 
+---
+
+## Older and mostly-redundant informational links
+
+Before this repo was created, my k210 SPI Flash explorations were documented in the following gists:
+
+* [k210_flash](https://gist.github.com/jdlcdl/a01dbf21771516581b4ccfda49622293)
+* [krux_under_the_hood](https://gist.github.com/jdlcdl/a8a750500e6715772c395f78c870c109)
+* [krux_firmware_overflow](https://gist.github.com/jdlcdl/5d5202d5b010ad3cbf3bab1b209e1992)
+* [krux_upgrade_v22_to_v23](https://gist.github.com/jdlcdl/f3c5225efa55d1d0b02bad6b46930cb1)
+
