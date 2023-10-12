@@ -1,11 +1,13 @@
 ## Digging into the k210 SPI Flash via hex_dump
 
-While inside the k210 console:
+(Continued from [analyze_spi_flash example](./analyze_spi_flash_example.md))
+
+While inside the k210 usb console:
 ```
 minicom -D /dev/ttyUSB1 -b 115200
 ```
 
-After interrupting krux with `<ctrl>-c`, stopping the watchdog timer and importing utils from Maix:
+After interrupting krux with `<ctrl>-c`, stopping the watchdog timer, and importing utils from Maix:
 ```
 from machine import WDT
 WDT().stop()
@@ -148,15 +150,15 @@ class HexDumpSPIFlash:
 `HexDumpSPIFlash` is a class that must first be instantiated, then you can call the instance's `run()` method.
 While it's running, you are limited to the following commands, which are submitted once you hit `<enter>`:
 * `j <enter>`: moves one screen down
-* `k <enter>`: moves one screen up (this will get stuck when "squeeze" is toggled on!)
+* `k <enter>`: moves one screen up (note: get's stuck when "squeeze" is toggled on!)
 * `l <enter>`: will prompt you for a number of lines, and then will adjust screen height
 * `w <enter>`: will prompt you for a number of bytes, and then will adjust screen width
 * `s <enter>`: will toggle "squeeze" on or off
-* `/ <enter>`: will prompt you for an address (if entering a hex address, must prefix with "0x")
+* `/ <enter>`: will prompt you for an address (note: must prefix hex addresses w/ "0x")
 * `q <enter>`: to quit the run() method.
 
 
-## The main configuration changed
+## Previously, the main configuration changed
 
 let's take a hex dump, and try to explain it.
 
@@ -205,7 +207,7 @@ Each config entry is 32 bytes, and Kboot supports 8 entries.
 The first 4 bytes always start like "0x5aa5d0c*" and the last nible is a 4 bit mask called "Entry flags", they are
 * 0001 = This is the ACTIVE flag, if set, this is the active configuration to use.
 * 0010 = this is the CRC32 flag, if set, the app's calculated CRC32 value must match the configuration's CRC32 value.
-* 0100 = This is the AES256 flag, if set, the sha256(header+app) value must match the 32 bytes following the app. 
+* 0100 = This is the SHA256 flag, if set, the sha256(header+app) value must match the 32 bytes following app data. 
 * 1000 = this is the SIZE flag, if set, the app's size must match the configuration's size value.
 
 We can see that main configuration has Entry flags of "D"=1101 (Check SIZE, Check AES256, Ignore CRC32, Is ACTIVE)
@@ -214,14 +216,14 @@ We can see its backup configuration had Entry flags of "5"=0101 (Ignore SIZE, Ch
 The next 4 bytes, as a big-endian int, are the location of the application in SPI Flash.
 We can see that it was at 0x80000 in the backup config and that it is now at 0x280000 in main config.
 
-The next 4 bytes, as a big-endian int, are the application size.  We can see that the backup config indicates the application size was 1744896 when up above we see that it was really 1716288, but because the configuration entry flag was "5"=0101, the highest SIZE flag was not set and there were no problems.  In the new configuration which uses "D"=1101, the highest SIZE flag is set and we have a matching size in configuration of 1902592 in slot 2.
+The next 4 bytes, as a big-endian int, are the application size.  We can see that the backup config indicates the application size was 1744896 (0x1aa000) while previously we see that it was really 1716288 bytes, but because the configuration entry flag was "5"=0101, the highest SIZE flag was not set, so app size was ignored.  In the new configuration which uses "D"=1101, the highest SIZE flag is set and we have a matching size in configuration of 1902592 (0x1d0800) in firmware slot 2.
 
 The next 4 bytes are the application's CRC32 value, in both cases above they are 0x24c6abaa, but according to the configuration, they're not used and I don't know what they mean, just that they came from `config.bin` within the `kboot.kfpkg` archive.
 
 The next 16 bytes are the application name or description, in our case, it's "firmware" follwed by 8 null bytes.
 
 
-## The SPI Flash File System changed
+## Previously, the SPI Flash File System changed
 
 Let's take a long hex dump, and try to explain it
 
@@ -644,7 +646,11 @@ fe1000  ff ff ff ff  ff ff ff ff  ff ff ff ff  ff ff ff ff  |................|
 fffff0  ff ff ff ff  ff ff ff ff  ff ff ff ff  ff ff ff ff  |................|
 ```
 
-We can see our encrypted seed arouund 0xd18000 inside `seeds.json`:
+While SPIFFS is mostly empty (w/ 0xff bytes), we can see many copies of `settings.json`.  This is a 'feature' 
+of this filesystem type which prioritizes a 'sparse' layout and 'wear leveling' for performance and 
+durability on SPI Flash chips. Note that we see it's 4-byte formatting markers every 128K.
+
+More interestingly, we can see our encrypted seed around 0xd18000 inside `seeds.json`:
 ```json
 {
   "f91a61f7": {
@@ -655,7 +661,13 @@ We can see our encrypted seed arouund 0xd18000 inside `seeds.json`:
 }
 ```
 
-Knowing that our key was "abc", iterations were 100000, and mode was ECB, we can decrypt this seed.
+Knowing that:
+* our super secret key was "abc", 
+* iterations were 100000, 
+* the fingerprint label will be used as a 'salt', and 
+* mode was ECB.
+
+We can decrypt this seed, as follows:
 
 ```python
 from ucryptolib import aes, MODE_ECB
