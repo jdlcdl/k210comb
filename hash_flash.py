@@ -6,7 +6,6 @@ def hash_flash(begin=0x00, length=2**24, block_size=2**12, verbose=False):
     ie: `from Maix import utils`
     '''
 
-    from math import ceil
     from hashlib import sha256
     from binascii import hexlify
 

@@ -1,19 +1,18 @@
 def crc32_flash(begin=0x00, length=2**24, block_size=2**12, verbose=False):
     '''
-    Calculate the crc32 of the entirety, or from begin to begin+length, of SPI Flash memory
+    Calculate the CRC32 of the entirety, or from begin to begin+length, of SPI Flash memory
 
     assumes that utils.flash_read() behaves as if imported from Maix,
     ie: `from Maix import utils`
     '''
 
-    from math import ceil
     from binascii import hexlify, crc32
 
     assert block_size % block_size == 0, 'block_size must be divisible by 4096'
     checksum = 0
 
     if verbose:
-        print('Calculating crc32 for %s bytes of flash at %s...' % (length, hex(begin)), end='')
+        print('Calculating CRC32 for %s bytes of flash at %s...' % (length, hex(begin)), end='')
 
     bytes_read = 0
     while bytes_read < length:
@@ -28,7 +27,7 @@ def crc32_flash(begin=0x00, length=2**24, block_size=2**12, verbose=False):
             print('.', end='')
 
     if verbose:
-        print('\ncrc32 of %s bytes at %s:\n%s' % (bytes_read, hex(begin), checksum))
+        print('\nCRC32 of %s bytes at %s:\n%s' % (bytes_read, hex(begin), checksum))
 
     return checksum
 

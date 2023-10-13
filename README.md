@@ -31,6 +31,9 @@ returns the sha256 hash of bytes in flash.
 * [crc32_flash.py](./crc32_flash.py):
 returns the crc32 checksum of bytes in flash.
 
+* [hashcrc_flash.py](./hashcrc_flash.py):
+returns the sha256 hash and the crc32 checksum of bytes in flash.
+
 * [all_bytes_are.py](./all_bytes_are.py):
 returns true if bytes in flash are the same as the one passed in.
 
