@@ -9,11 +9,18 @@ ie: `from Maix import utils`
 from binascii import crc32
 from hashlib import sha256
 
-class KbootConfigEntry:
-    BASE_ENTRY_ID = 0x5aa5d0c0
-    APP_ADDRESS_RANGE = (0x10000, 0x8000000)
+
+class KbootConstants:
+    STAGE0_ADDRESS = 0x0
+    STAGE1_ADDRESS = 0x1000
+    MAIN_CONFIG_ADDRESS = 0x4000
+    BACKUP_CONFIG_ADDRESS = 0x5000
+    BASE_CONFIG_ENTRY_ID = 0x5aa5d0c0
+    APP_ADDRESS_RANGE = (0x10000, 0x800000)
     APP_SIZE_RANGE = (0x4000, 0x300000)
 
+
+class KbootConfigEntry:
     def __init__(self, raw_bytes):
         if type(raw_bytes) == bytes and len(raw_bytes) == 32:
             self.parse(raw_bytes)
@@ -22,29 +29,29 @@ class KbootConfigEntry:
  
     def parse(self, raw_bytes):
         id_flags = int.from_bytes(raw_bytes[:4], 'big')
-        if self.BASE_ENTRY_ID <= id_flags <= self.BASE_ENTRY_ID+16:
+        if KbootConstants.BASE_CONFIG_ENTRY_ID <= id_flags <= KbootConstants.BASE_CONFIG_ENTRY_ID+16:
             self.is_active = bool(id_flags & 1)
             self.ck_crc32 = bool(id_flags & 2)
             self.ck_sha256 = bool(id_flags & 4)
             self.ck_size = bool(id_flags & 8)
         else:
             raise ValueError('First 28 bits of Entry ID must be {}'.format(
-                hex(self.BASE_ENTRY_ID)[:-1]))
+                hex(KbootConstants.BASE_CONFIG_ENTRY_ID)[:-1]))
 
         app_address = int.from_bytes(raw_bytes[4:8], 'big')
-        if self.APP_ADDRESS_RANGE[0] <= app_address <= self.APP_ADDRESS_RANGE[1]:
+        if KbootConstants.APP_ADDRESS_RANGE[0] <= app_address <= KbootConstants.APP_ADDRESS_RANGE[1]:
             self.app_address = app_address
         else:
             raise ValueError('Valid app address range is {} to {}'.format(
-                *[hex(x) for x in self.APP_ADDRESS_RANGE]
+                *[hex(x) for x in KbootConstants.APP_ADDRESS_RANGE]
             ))
 
         app_size = int.from_bytes(raw_bytes[8:12], 'big')
-        if self.APP_SIZE_RANGE[0] <= app_size <= self.APP_SIZE_RANGE[1]:
+        if KbootConstants.APP_SIZE_RANGE[0] <= app_size <= KbootConstants.APP_SIZE_RANGE[1]:
             self.app_size = app_size
         else:
             raise ValueError('Valid app size range is {} to {} bytes'.format(
-                *self.APP_SIZE_RANGE
+                *KbootConstants.APP_SIZE_RANGE
             )) 
 
         self.app_crc32 = raw_bytes[12:16]
@@ -53,7 +60,7 @@ class KbootConfigEntry:
         self.raw_bytes = raw_bytes
 
     def serialize(self):
-        id_entry = self.BASE_ENTRY_ID
+        id_entry = KbootConstants.BASE_CONFIG_ENTRY_ID
         if self.is_active: id_entry += 1
         if self.ck_crc32: id_entry += 2
         if self.ck_sha256: id_entry += 4
@@ -69,11 +76,11 @@ class KbootConfigEntry:
 
 
 class KbootConfigSector:
-    MAIN_ADDRESS = 0x4000
-    BACKUP_ADDRESS = 0x5000
-
-    def __init__(self, raw_bytes, main=True):
-        self.main = main
+    def __init__(self, main=True):
+        if main:
+            raw_bytes = utils.flash_read(KbootConstants.MAIN_CONFIG_ADDRESS, 4096)
+        else:
+            raw_bytes = utils.flash_read(KbootConstants.BACKUP_CONFIG_ADDRESS, 4096)
 
         if type(raw_bytes) == bytes and len(raw_bytes) == 4096:
             self.parse(raw_bytes)
@@ -87,7 +94,7 @@ class KbootConfigSector:
             except: pass
 
         self.config_flags = int.from_bytes(raw_bytes[256:260], 'big')
-        if self.config_flags == KbootConfigEntry.BASE_ENTRY_ID:
+        if self.config_flags == KbootConstants.BASE_CONFIG_ENTRY_ID:
             self.interactive_disabled = True
         else:
             self.interactive_disabled = False
@@ -119,7 +126,7 @@ class KbootConfigSector:
                 raw_bytes += b'\x00' * 32
 
         if self.interactive_disabled:
-            raw_bytes += KbootConfigEntry.BASE_ENTRY_ID.to_bytes(4, 'big')
+            raw_bytes += KbootConstants.BASE_CONFIG_ENTRY_ID.to_bytes(4, 'big')
         else:
             raw_bytes += self.config_flags.to_bytes(4, 'big')
 
@@ -135,22 +142,18 @@ class KbootConfigSector:
 
 
 class KbootAppSector:
-    STAGE0_ADDRESS = 0x0
-    STAGE1_ADDRESS = 0x1000
-    APP_ADDRESS_RANGE = (0x10000, 0x800000)
-
     def __init__(self, address):
         if address % 0x1000 != 0:
             raise ValueError('Address must begin at a 4096-byte aligned sector')
-        if address in (self.STAGE0_ADDRESS, self.STAGE1_ADDRESS):
+        if address in (KbootConstants.STAGE0_ADDRESS, KbootConstants.STAGE1_ADDRESS):
             self.block_size = 0x1000
-        elif self.APP_ADDRESS_RANGE[0] <= address <= self.APP_ADDRESS_RANGE[1]:
+        elif KbootConstants.APP_ADDRESS_RANGE[0] <= address <= KbootConstants.APP_ADDRESS_RANGE[1]:
             self.block_size = 0x10000
         else:
             raise ValueError('Address must be {}, {}, or between {}'.format(
-                hex(self.STAGE0_ADDRESS),
-                hex(self.STAGE1_ADDRESS),
-                [hex(x) for x in self.APP_ADDRESS_RANGE]
+                hex(KbootConstants.STAGE0_ADDRESS),
+                hex(KbootConstants.STAGE1_ADDRESS),
+                [hex(x) for x in KbootConstants.APP_ADDRESS_RANGE]
             ))
         self.validate(address)
 
@@ -204,14 +207,13 @@ class KbootAppSector:
 
 
 
-
 if __name__ == '__main__':
 
     from binascii import hexlify, unhexlify
 
     configurations = {
-        'main': KbootConfigSector(utils.flash_read(0x4000, 0x1000)),
-        'backup': KbootConfigSector(utils.flash_read(0x5000, 0x1000))
+        'main': KbootConfigSector(main=True),
+        'backup': KbootConfigSector(main=False)
     }
 
     applications = {
@@ -257,7 +259,6 @@ if __name__ == '__main__':
             '\n block_size: {}'.format(hex(app.block_size)),
             '\n all_size: {}, app_size: {}'.format(app.all_size, app.app_size),
             '\n all_crc: {}, app_crc: {}'.format(app.all_crc, app.app_crc),
-            '\n all_hash: {}'.format(hexlify(app.all_hash)),
-            '\n app_hash: {}'.format(hexlify(app.app_hash))
+            '\n all_hash: {}\n app_hash: {}'.format(hexlify(app.all_hash), hexlify(app.app_hash)),
         )
 
