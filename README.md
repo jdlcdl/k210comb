@@ -40,8 +40,8 @@ returns true if bytes in flash are the same as the one passed in.
 * [validate_aes_size_app_sha_nulpad.py](./validate_aes_size_app_sha_nulpad.py):
 used to validate a kboot/ktool sector.
 
-* [kboot_config.py](./kboot_config.py):
-classes to model Kboot's main/backup configuration sectors.
+* [kboot_classes.py](./kboot_classes.py):
+classes to model Kboot's bootloader, configuration and application sectors.
 
 * [analyze_spi_flash.py](./analyze_spi_flash.py):
 using above tools, analyzes the entirety of SPI Flash, verbosely printing its findings.

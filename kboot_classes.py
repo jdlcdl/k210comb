@@ -1,10 +1,12 @@
 '''
-Kboot configuration classes
+classes to model Kboot bootloader, configuration, and application sectors
 
 assumes that utils.flash_read() behaves as if imported from Maix:
 ie: `from Maix import utils`
 '''
 
+
+from binascii import crc32
 from hashlib import sha256
 
 class KbootConfigEntry:
@@ -132,6 +134,77 @@ class KbootConfigSector:
         return sha256(self.raw_bytes).digest()
 
 
+class KbootAppSector:
+    STAGE0_ADDRESS = 0x0
+    STAGE1_ADDRESS = 0x1000
+    APP_ADDRESS_RANGE = (0x10000, 0x800000)
+
+    def __init__(self, address):
+        if address % 0x1000 != 0:
+            raise ValueError('Address must begin at a 4096-byte aligned sector')
+        if address in (self.STAGE0_ADDRESS, self.STAGE1_ADDRESS):
+            self.block_size = 0x1000
+        elif self.APP_ADDRESS_RANGE[0] <= address <= self.APP_ADDRESS_RANGE[1]:
+            self.block_size = 0x10000
+        else:
+            raise ValueError('Address must be {}, {}, or between {}'.format(
+                hex(self.STAGE0_ADDRESS),
+                hex(self.STAGE1_ADDRESS),
+                [hex(x) for x in self.APP_ADDRESS_RANGE]
+            ))
+        self.validate(address)
+
+    def validate(self, address):
+        a_block = utils.flash_read(address, self.block_size)
+        if a_block[0:1] != b'\x00':
+            raise ValueError('AES byte in header at {} must be 0x00'.format(hex(address)))
+
+        expected_size = int.from_bytes(a_block[1:5], 'little')
+
+        all_hash, app_hash = sha256(), sha256()
+        all_crc, app_crc = 0, 0
+        bytes_read = 0
+
+        begin = 5
+        while bytes_read < expected_size:
+            if expected_size >= bytes_read + self.block_size:
+                end = self.block_size
+            else:
+                end = expected_size + begin - bytes_read
+            
+            all_hash.update(a_block[:end])
+            all_crc = crc32(a_block[:end], all_crc)
+            app_hash.update(a_block[begin:end])
+            app_crc = crc32(a_block[begin:end], app_crc)
+          
+            bytes_read += end - begin
+
+            if self.block_size - end < 32:
+                begin = 0
+                a_block = utils.flash_read(address + bytes_read +5, self.block_size)
+
+        all_hash = all_hash.digest()
+        if a_block[end:end+32] != all_hash:
+            ValueError('KbootApp at {} is corrupted; calculated sha256 does not match suffix'.format(
+                hex(address)
+            ))
+
+        if a_block[end+32:] != b'\x00' * (self.block_size - end - 32):
+            ValueError('KbootApp at {} should be null-byte padded to the end of the sector'.format(
+                hex(address)
+            ))
+
+        self.address = address
+        self.all_hash = all_hash
+        self.all_crc = all_crc
+        self.app_hash = app_hash.digest()
+        self.app_crc = app_crc
+        self.all_size = 5 + bytes_read + (self.block_size - end)
+        self.app_size = expected_size
+
+
+
+
 if __name__ == '__main__':
 
     from binascii import hexlify, unhexlify
@@ -139,6 +212,13 @@ if __name__ == '__main__':
     configurations = {
         'main': KbootConfigSector(utils.flash_read(0x4000, 0x1000)),
         'backup': KbootConfigSector(utils.flash_read(0x5000, 0x1000))
+    }
+
+    applications = {
+        'stage0': KbootAppSector(0x0), 
+        'stage1': KbootAppSector(0x1000),
+        'firmware_slot1': KbootAppSector(0x80000),
+        'firmware_slot2': KbootAppSector(0x280000)
     }
 
     for name, config in configurations.items():
@@ -170,3 +250,14 @@ if __name__ == '__main__':
             assert entry.raw_bytes == entry.serialize()
 
         assert config.raw_bytes == config.serialize()
+
+    for name, app in applications.items():
+        print(
+            '\nKboot app {} at {}'.format(name, hex(app.address)),
+            '\n block_size: {}'.format(hex(app.block_size)),
+            '\n all_size: {}, app_size: {}'.format(app.all_size, app.app_size),
+            '\n all_crc: {}, app_crc: {}'.format(app.all_crc, app.app_crc),
+            '\n all_hash: {}'.format(hexlify(app.all_hash)),
+            '\n app_hash: {}'.format(hexlify(app.app_hash))
+        )
+
