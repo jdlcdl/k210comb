@@ -28,6 +28,9 @@ used to decrement verbosity for functions that call other functions.
 * [hash_flash.py](./hash_flash.py):
 returns the sha256 hash of bytes in flash.
 
+* [crc32_flash.py](./crc32_flash.py):
+returns the crc32 checksum of bytes in flash.
+
 * [all_bytes_are.py](./all_bytes_are.py):
 returns true if bytes in flash are the same as the one passed in.
 
