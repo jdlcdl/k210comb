@@ -9,7 +9,6 @@ def hash_flash(begin=0x00, length=2**24, block_size=2**12, verbose=False):
     from hashlib import sha256
     from binascii import hexlify
 
-    assert block_size % block_size == 0, 'block_size must be divisible by 4096'
     _hash = sha256()
 
     if verbose:
