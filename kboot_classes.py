@@ -5,7 +5,6 @@ assumes that utils.flash_read() behaves as if imported from Maix:
 ie: `from Maix import utils`
 '''
 
-
 from binascii import crc32
 from hashlib import sha256
 
@@ -99,46 +98,49 @@ class KbootConfigEntry:
 
 
 class KbootConfigSector:
-    def __init__(self, main=True):
-        if main:
-            raw_bytes = utils.flash_read(KbootConstants.MAIN_CONFIG_ADDRESS, 4096)
+    def __init__(self,
+        entries=[],
+        config_flags=0,
+        reserved=0,
+        user_data=0
+    ):
+        if 0 <= len(entries) <= 8 and set([type(x)==KbootConfigEntry for x in entries]) == set([True]):
+            self.entries = entries
         else:
-            raw_bytes = utils.flash_read(KbootConstants.BACKUP_CONFIG_ADDRESS, 4096)
+            print(entries)
+            raise ValueError('entries must be of type KbootConfigEntry and of length 0-8')
+        
+        self.config_flags = config_flags
+        self.reserved = reserved
+        self.user_data = user_data
 
-        if type(raw_bytes) == bytes and len(raw_bytes) == 4096:
-            self.parse(raw_bytes)
-        else:
+    @classmethod
+    def from_bytes(cls, raw_bytes):
+        if type(raw_bytes) != bytes or len(raw_bytes) != 4096:
             raise ValueError('raw_bytes must be of type bytes and of length 4096')
 
-    def parse(self, raw_bytes):
-        self.entries = []
+        entries = []
         for i in range(0, 32*8, 32):
-            try: self.entries.append(KbootConfigEntry.from_bytes(raw_bytes[i:i+32]))
+            try: entries.append(KbootConfigEntry.from_bytes(raw_bytes[i:i+32]))
             except: pass
 
-        self.config_flags = int.from_bytes(raw_bytes[256:260], 'big')
-        if self.config_flags == KbootConstants.BASE_CONFIG_ENTRY_ID:
-            self.interactive_disabled = True
-        else:
-            self.interactive_disabled = False
+        config_flags = int.from_bytes(raw_bytes[256:260], 'big')
+        reserved = int.from_bytes(raw_bytes[260:264], 'big')
 
-        self.reserved = raw_bytes[260:264]
-
-        undocumented = raw_bytes[264:288]
-        if undocumented == b'\x00'*24:
-            self.undocumented = undocumented
-        else:
+        if raw_bytes[264:288] != b'\x00'*24:
             raise ValueError('24 bytes undocumented between reserved and user_data should be null')
 
-        self.user_data = raw_bytes[288:292]
+        user_data = int.from_bytes(raw_bytes[288:292], 'big')
 
-        padding = raw_bytes[292:]
-        if padding == b'\x00'*3804:
-            self.padding = padding
-        else:
-            raise ValueError('3804 bytes to end of sector should be null padded')
+        if raw_bytes[292:] != b'\x00'*3804:
+            raise ValueError('3804 bytes to pad end of sector should be null')
 
-        self.raw_bytes = raw_bytes
+        return cls(
+            entries=entries,
+            config_flags=config_flags,
+            reserved=reserved,
+            user_data=user_data
+        )
 
     def serialize(self):
         raw_bytes = b''
@@ -148,20 +150,16 @@ class KbootConfigSector:
             else:
                 raw_bytes += b'\x00' * 32
 
-        if self.interactive_disabled:
-            raw_bytes += KbootConstants.BASE_CONFIG_ENTRY_ID.to_bytes(4, 'big')
-        else:
-            raw_bytes += self.config_flags.to_bytes(4, 'big')
-
-        raw_bytes += self.reserved
-        raw_bytes += self.undocumented
-        raw_bytes += self.user_data
-        raw_bytes += self.padding
+        raw_bytes += self.config_flags.to_bytes(4, 'big')
+        raw_bytes += self.reserved.to_bytes(4, 'big')
+        raw_bytes += b'\x00' * 24
+        raw_bytes += self.user_data.to_bytes(4, 'big')
+        raw_bytes += b'\x00' * 3804
 
         return raw_bytes
 
     def sha256(self):
-        return sha256(self.raw_bytes).digest()
+        return sha256(self.serialize()).digest()
 
 
 class KbootAppSector:
@@ -233,36 +231,33 @@ if __name__ == '__main__':
 
     from binascii import hexlify, unhexlify
 
-    configurations = [
-        ('main', KbootConfigSector(main=True)),
-        ('backup', KbootConfigSector(main=False))
+    config_tuples = [
+        ('main', utils.flash_read(KbootConstants.MAIN_CONFIG_ADDRESS, 4096)),
+        ('backup', utils.flash_read(KbootConstants.BACKUP_CONFIG_ADDRESS, 4096))
     ]
 
-    applications = [
-        ('stage0', KbootAppSector(0x0)), 
-        ('stage1', KbootAppSector(0x1000)),
-        ('firmware_slot1', KbootAppSector(0x80000)),
+    app_tuples = [
+        ('stage0', 0x0), 
+        ('stage1', 0x1000),
+        ('default_app', 0x10000),
+        ('firmware_slot1', 0x80000),
+        ('firmware_slot2', 0x280000),
+        ('firmware_slot3', 0x800000),
     ]
-    try: applications.append(('firmware_slot2', KbootAppSector(0x280000)))
-    except: pass
-    try: applications.append(('firmware_slot3', KbootAppSector(0x800000)))
-    except: pass
 
-    for name, config in configurations:
+    configs = {}
+    for name, raw_bytes in config_tuples:
+        config = KbootConfigSector.from_bytes(raw_bytes)
         print(
             '\nconfig {}\n raw_bytes: {} (null padding trimmed)'.format(
-                name, hexlify(config.raw_bytes[:-3804])
+                name, hexlify(raw_bytes[:-3804])
             ),
             '\n sha256: {}'.format(hexlify(config.sha256())),
             '\n num entries: {}'.format(len(config.entries)),
-            '\n config_flags: {}, interactive_disabled: {}'.format(
-                hexlify(config.config_flags.to_bytes(4, 'big')), config.interactive_disabled),
-            '\n reserved: {}'.format(hexlify(config.reserved)),
-            '\n undocumented: {}'.format(hexlify(config.undocumented)),
-            '\n user_data: {}'.format(hexlify(config.user_data)),
-            '\n length of null padding: {}'.format(len(config.padding))
+            '\n config_flags: {}'.format(hexlify(config.config_flags.to_bytes(4, 'big'))),
+            '\n reserved: {}'.format(hexlify(config.reserved.to_bytes(4, 'big'))),
+            '\n user_data: {}'.format(hexlify(config.user_data.to_bytes(4, 'big')))
         )
-
         for i, entry in enumerate(config.entries):
             print(
                 '\n config.entry #{}\n raw_bytes : {}'.format(i, hexlify(entry.serialize())),
@@ -274,10 +269,13 @@ if __name__ == '__main__':
                 '\n  app_crc32: {}'.format(entry.app_crc32),
                 '\n  app_name: {}'.format(entry.app_name)
             )
+        assert raw_bytes == config.serialize()
+        configs[name] = config
 
-        assert config.raw_bytes == config.serialize()
-
-    for name, app in applications:
+    apps = {}
+    for name, address in app_tuples:
+        try: app = KbootAppSector(address)
+        except: continue
         print(
             '\nKboot app {} at {}'.format(name, hex(app.address)),
             '\n block_size: {}'.format(hex(app.block_size)),
@@ -287,4 +285,4 @@ if __name__ == '__main__':
             '\n hdrapp_sha256: {}'.format(hexlify(app.hdrapp_sha256)),
             '\n app_sha256: {}'.format(hexlify(app.app_sha256))
         )
-
+        apps[name] = app
