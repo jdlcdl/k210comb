@@ -206,7 +206,7 @@ Each config entry is 32 bytes, and Kboot supports 8 entries.
 
 The first 4 bytes always start like "0x5aa5d0c*" and the last nible is a 4 bit mask called "Entry flags", they are
 * 0001 = This is the ACTIVE flag, if set, this is the active configuration to use.
-* 0010 = this is the CRC32 flag, if set, the app's calculated CRC32 value must match the configuration's CRC32 value.
+* 0010 = this is the CRC32 flag, if set, the app's calculated CRC32 value must match the configuration's CRC32 value. If the sha256 flag is set, then it will take precedence and this crc32 flag will not be checked.
 * 0100 = This is the SHA256 flag, if set, the sha256(header+app) value must match the 32 bytes following app data. 
 * 1000 = this is the SIZE flag, if set, the app's size must match the configuration's size value.
 

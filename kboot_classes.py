@@ -21,24 +21,15 @@ class KbootConstants:
 
 
 class KbootConfigEntry:
-    def __init__(self, raw_bytes):
-        if type(raw_bytes) == bytes and len(raw_bytes) == 32:
-            self.parse(raw_bytes)
-        else:
-            raise ValueError('raw_bytes must be of type bytes and of length 32')
- 
-    def parse(self, raw_bytes):
-        id_flags = int.from_bytes(raw_bytes[:4], 'big')
-        if KbootConstants.BASE_CONFIG_ENTRY_ID <= id_flags <= KbootConstants.BASE_CONFIG_ENTRY_ID+16:
-            self.is_active = bool(id_flags & 1)
-            self.ck_crc32 = bool(id_flags & 2)
-            self.ck_sha256 = bool(id_flags & 4)
-            self.ck_size = bool(id_flags & 8)
-        else:
-            raise ValueError('First 28 bits of Entry ID must be {}'.format(
-                hex(KbootConstants.BASE_CONFIG_ENTRY_ID)[:-1]))
-
-        app_address = int.from_bytes(raw_bytes[4:8], 'big')
+    def __init__(self, app_address, 
+        is_active=True, 
+        ck_crc32=False,
+        ck_sha256=False,
+        ck_size=False,
+        app_size=KbootConstants.APP_SIZE_RANGE[0],
+        app_crc32=0,
+        app_name='firmware'
+    ):
         if KbootConstants.APP_ADDRESS_RANGE[0] <= app_address <= KbootConstants.APP_ADDRESS_RANGE[1]:
             self.app_address = app_address
         else:
@@ -46,7 +37,6 @@ class KbootConfigEntry:
                 *[hex(x) for x in KbootConstants.APP_ADDRESS_RANGE]
             ))
 
-        app_size = int.from_bytes(raw_bytes[8:12], 'big')
         if KbootConstants.APP_SIZE_RANGE[0] <= app_size <= KbootConstants.APP_SIZE_RANGE[1]:
             self.app_size = app_size
         else:
@@ -54,10 +44,43 @@ class KbootConfigEntry:
                 *KbootConstants.APP_SIZE_RANGE
             )) 
 
-        self.app_crc32 = raw_bytes[12:16]
-        self.app_name = raw_bytes[16:].decode('utf8')
-        
-        self.raw_bytes = raw_bytes
+        self.is_active = bool(is_active)
+        self.ck_crc32 = bool(ck_crc32)
+        self.ck_sha256 = bool(ck_sha256)
+        self.ck_size = bool(ck_size)
+        self.app_crc32 = int(app_crc32)
+        self.app_name = str(app_name)
+
+    @classmethod
+    def from_bytes(cls, raw_bytes):
+        if type(raw_bytes) != bytes or len(raw_bytes) != 32:
+            raise ValueError('raw_bytes must be of type bytes and of length 32')
+
+        id_flags = int.from_bytes(raw_bytes[:4], 'big')
+        if KbootConstants.BASE_CONFIG_ENTRY_ID <= id_flags <= KbootConstants.BASE_CONFIG_ENTRY_ID+16:
+            is_active = bool(id_flags & 1)
+            ck_crc32 = bool(id_flags & 2)
+            ck_sha256 = bool(id_flags & 4)
+            ck_size = bool(id_flags & 8)
+        else:
+            raise ValueError('First 28 bits of Entry ID must be {}'.format(
+                hex(KbootConstants.BASE_CONFIG_ENTRY_ID)[:-1]))
+
+        app_address = int.from_bytes(raw_bytes[4:8], 'big')
+        app_size = int.from_bytes(raw_bytes[8:12], 'big')
+        app_crc32 = int.from_bytes(raw_bytes[12:16], 'big')
+        app_name = raw_bytes[16:].decode('utf8')
+
+        return cls(
+            app_address=app_address,
+            is_active=is_active,
+            ck_crc32=ck_crc32,
+            ck_sha256=ck_sha256,
+            ck_size=ck_size,
+            app_size=app_size,
+            app_crc32=app_crc32,
+            app_name=app_name
+        )
 
     def serialize(self):
         id_entry = KbootConstants.BASE_CONFIG_ENTRY_ID
@@ -69,7 +92,7 @@ class KbootConfigEntry:
 
         raw_bytes += self.app_address.to_bytes(4, 'big')
         raw_bytes += self.app_size.to_bytes(4, 'big')
-        raw_bytes += self.app_crc32
+        raw_bytes += self.app_crc32.to_bytes(4, 'big')
         raw_bytes += (self.app_name.encode('utf8') + b'\x00'*16)[:16]
 
         return raw_bytes
@@ -90,7 +113,7 @@ class KbootConfigSector:
     def parse(self, raw_bytes):
         self.entries = []
         for i in range(0, 32*8, 32):
-            try: self.entries.append(KbootConfigEntry(raw_bytes[i:i+32]))
+            try: self.entries.append(KbootConfigEntry.from_bytes(raw_bytes[i:i+32]))
             except: pass
 
         self.config_flags = int.from_bytes(raw_bytes[256:260], 'big')
@@ -164,8 +187,9 @@ class KbootAppSector:
 
         expected_size = int.from_bytes(a_block[1:5], 'little')
 
-        all_hash, app_hash = sha256(), sha256()
-        all_crc, app_crc = 0, 0
+        hdrapp_hash = sha256()
+        app_hash = sha256()
+        app_crc = 0
         bytes_read = 0
 
         begin = 5
@@ -175,8 +199,7 @@ class KbootAppSector:
             else:
                 end = expected_size + begin - bytes_read
             
-            all_hash.update(a_block[:end])
-            all_crc = crc32(a_block[:end], all_crc)
+            hdrapp_hash.update(a_block[:end])
             app_hash.update(a_block[begin:end])
             app_crc = crc32(a_block[begin:end], app_crc)
           
@@ -186,8 +209,8 @@ class KbootAppSector:
                 begin = 0
                 a_block = utils.flash_read(address + bytes_read +5, self.block_size)
 
-        all_hash = all_hash.digest()
-        if a_block[end:end+32] != all_hash:
+        hdrapp_hash = hdrapp_hash.digest()
+        if a_block[end:end+32] != hdrapp_hash:
             ValueError('KbootApp at {} is corrupted; calculated sha256 does not match suffix'.format(
                 hex(address)
             ))
@@ -198,11 +221,10 @@ class KbootAppSector:
             ))
 
         self.address = address
-        self.all_hash = all_hash
-        self.all_crc = all_crc
-        self.app_hash = app_hash.digest()
-        self.app_crc = app_crc
-        self.all_size = 5 + bytes_read + (self.block_size - end)
+        self.hdrapp_sha256 = hdrapp_hash
+        self.app_sha256 = app_hash.digest()
+        self.app_crc32 = app_crc
+        self.sector_size = 5 + bytes_read + (self.block_size - end)
         self.app_size = expected_size
 
 
@@ -211,19 +233,22 @@ if __name__ == '__main__':
 
     from binascii import hexlify, unhexlify
 
-    configurations = {
-        'main': KbootConfigSector(main=True),
-        'backup': KbootConfigSector(main=False)
-    }
+    configurations = [
+        ('main', KbootConfigSector(main=True)),
+        ('backup', KbootConfigSector(main=False))
+    ]
 
-    applications = {
-        'stage0': KbootAppSector(0x0), 
-        'stage1': KbootAppSector(0x1000),
-        'firmware_slot1': KbootAppSector(0x80000),
-        'firmware_slot2': KbootAppSector(0x280000)
-    }
+    applications = [
+        ('stage0', KbootAppSector(0x0)), 
+        ('stage1', KbootAppSector(0x1000)),
+        ('firmware_slot1', KbootAppSector(0x80000)),
+    ]
+    try: applications.append(('firmware_slot2', KbootAppSector(0x280000)))
+    except: pass
+    try: applications.append(('firmware_slot3', KbootAppSector(0x800000)))
+    except: pass
 
-    for name, config in configurations.items():
+    for name, config in configurations:
         print(
             '\nconfig {}\n raw_bytes: {} (null padding trimmed)'.format(
                 name, hexlify(config.raw_bytes[:-3804])
@@ -240,25 +265,26 @@ if __name__ == '__main__':
 
         for i, entry in enumerate(config.entries):
             print(
-                '\nconfig.entry #{}\n raw_bytes : {}'.format(i, hexlify(entry.raw_bytes)),
-                '\n is_active: {}, ck_crc32: {}, ck_sha256: {}, ck_size: {}'.format(
+                '\n config.entry #{}\n raw_bytes : {}'.format(i, hexlify(entry.serialize())),
+                '\n  is_active: {}, ck_crc32: {}, ck_sha256: {}, ck_size: {}'.format(
                      entry.is_active, entry.ck_crc32, entry.ck_sha256, entry.ck_size
                 ),
-                '\n app_address: {} {}'.format(entry.app_address, hex(entry.app_address)),
-                '\n app_size: {} {}'.format(entry.app_size, hex(entry.app_size)),
-                '\n app_crc32: {}'.format(hexlify(entry.app_crc32)),
-                '\n app_name: {}'.format(entry.app_name)
+                '\n  app_address: {} {}'.format(entry.app_address, hex(entry.app_address)),
+                '\n  app_size: {} {}'.format(entry.app_size, hex(entry.app_size)),
+                '\n  app_crc32: {}'.format(entry.app_crc32),
+                '\n  app_name: {}'.format(entry.app_name)
             )
-            assert entry.raw_bytes == entry.serialize()
 
         assert config.raw_bytes == config.serialize()
 
-    for name, app in applications.items():
+    for name, app in applications:
         print(
             '\nKboot app {} at {}'.format(name, hex(app.address)),
             '\n block_size: {}'.format(hex(app.block_size)),
-            '\n all_size: {}, app_size: {}'.format(app.all_size, app.app_size),
-            '\n all_crc: {}, app_crc: {}'.format(app.all_crc, app.app_crc),
-            '\n all_hash: {}\n app_hash: {}'.format(hexlify(app.all_hash), hexlify(app.app_hash)),
+            '\n sector_size: {} {}'.format(app.sector_size, hex(app.sector_size)),
+            '\n app_size: {}'.format(app.app_size),
+            '\n app_crc32: {}'.format(app.app_crc32),
+            '\n hdrapp_sha256: {}'.format(hexlify(app.hdrapp_sha256)),
+            '\n app_sha256: {}'.format(hexlify(app.app_sha256))
         )
 
