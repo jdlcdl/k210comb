@@ -5,6 +5,7 @@ assumes that utils.flash_read() behaves as if imported from Maix:
 ie: `from Maix import utils`
 '''
 
+
 from binascii import crc32
 from hashlib import sha256
 
@@ -96,6 +97,16 @@ class KbootConfigEntry:
 
         return raw_bytes
 
+    def __str__(self):
+        return '{}: flags: {}/{}/{}/{}, address: {}, size: {}'.format(
+            self.app_name,
+            'active' if self.is_active else 'NOT-active',
+            'ck_crc32' if self.ck_crc32 else 'NO-ck_crc32',
+            'ck_sha256' if self.ck_sha256 else 'NO-ck_sha256',
+            'ck_size' if self.ck_size else 'NO-ck_size',
+            hex(self.app_address),
+            self.app_size
+        )
 
 class KbootConfigSector:
     def __init__(self,
@@ -107,7 +118,6 @@ class KbootConfigSector:
         if 0 <= len(entries) <= 8 and set([type(x)==KbootConfigEntry for x in entries]) == set([True]):
             self.entries = entries
         else:
-            print(entries)
             raise ValueError('entries must be of type KbootConfigEntry and of length 0-8')
         
         self.config_flags = config_flags
@@ -160,6 +170,13 @@ class KbootConfigSector:
 
     def sha256(self):
         return sha256(self.serialize()).digest()
+
+    def __str__(self):
+        return 'config_flags: {}, user_data: {}, entries:\n  {}'.format(
+            hexlify(self.config_flags.to_bytes(4, 'big')).decode(),
+            hexlify(self.user_data.to_bytes(4, 'big')).decode(),
+            '\n  '.join([str(x) for x in self.entries])
+        )
 
 
 class KbootAppSector:
@@ -225,6 +242,14 @@ class KbootAppSector:
         self.sector_size = 5 + bytes_read + (self.block_size - end)
         self.app_size = expected_size
 
+    def __str__(self):
+        return 'address: {}, sector_size: {}, app_size: {}, crc32: {},\n  app_sha256: {}'.format(
+            hex(self.address),
+            hex(self.sector_size),
+            self.app_size,
+            self.app_crc32,
+            hexlify(self.app_sha256).decode()
+        )
 
 
 if __name__ == '__main__':
@@ -248,27 +273,6 @@ if __name__ == '__main__':
     configs = {}
     for name, raw_bytes in config_tuples:
         config = KbootConfigSector.from_bytes(raw_bytes)
-        print(
-            '\nconfig {}\n raw_bytes: {} (null padding trimmed)'.format(
-                name, hexlify(raw_bytes[:-3804])
-            ),
-            '\n sha256: {}'.format(hexlify(config.sha256())),
-            '\n num entries: {}'.format(len(config.entries)),
-            '\n config_flags: {}'.format(hexlify(config.config_flags.to_bytes(4, 'big'))),
-            '\n reserved: {}'.format(hexlify(config.reserved.to_bytes(4, 'big'))),
-            '\n user_data: {}'.format(hexlify(config.user_data.to_bytes(4, 'big')))
-        )
-        for i, entry in enumerate(config.entries):
-            print(
-                '\n config.entry #{}\n raw_bytes : {}'.format(i, hexlify(entry.serialize())),
-                '\n  is_active: {}, ck_crc32: {}, ck_sha256: {}, ck_size: {}'.format(
-                     entry.is_active, entry.ck_crc32, entry.ck_sha256, entry.ck_size
-                ),
-                '\n  app_address: {} {}'.format(entry.app_address, hex(entry.app_address)),
-                '\n  app_size: {} {}'.format(entry.app_size, hex(entry.app_size)),
-                '\n  app_crc32: {}'.format(entry.app_crc32),
-                '\n  app_name: {}'.format(entry.app_name)
-            )
         assert raw_bytes == config.serialize()
         configs[name] = config
 
@@ -276,13 +280,12 @@ if __name__ == '__main__':
     for name, address in app_tuples:
         try: app = KbootAppSector(address)
         except: continue
-        print(
-            '\nKboot app {} at {}'.format(name, hex(app.address)),
-            '\n block_size: {}'.format(hex(app.block_size)),
-            '\n sector_size: {} {}'.format(app.sector_size, hex(app.sector_size)),
-            '\n app_size: {}'.format(app.app_size),
-            '\n app_crc32: {}'.format(app.app_crc32),
-            '\n hdrapp_sha256: {}'.format(hexlify(app.hdrapp_sha256)),
-            '\n app_sha256: {}'.format(hexlify(app.app_sha256))
-        )
         apps[name] = app
+
+    for name in [x[0] for x in config_tuples]:
+        if name in configs:
+            print('\nKbootConfigSector: {}, {}'.format(name, configs[name]))
+
+    for name in [x[0] for x in app_tuples]:
+        if name in apps:
+            print('\nKbootAppSector: {}, {}'.format(name, apps[name]))
