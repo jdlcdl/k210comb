@@ -95,6 +95,14 @@ See [hex_dump example](./docs/hex_dump_example.md)
 
 ---
 
+## Using the classes in kboot_classes.py
+
+These classes are meant to model Kboot sectors (both bootloaders, both configurations, and firmwares).
+
+see [kboot_classes_example](./docs/kboot_classes_example.md)
+
+---
+
 ## Older and mostly-redundant informational links
 
 Before this repo was created, my k210 SPI Flash explorations were documented in the following gists:
