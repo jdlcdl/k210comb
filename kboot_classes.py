@@ -21,7 +21,8 @@ class KbootConstants:
 
 
 class KbootConfigEntry:
-    def __init__(self, app_address, 
+    def __init__(self,
+        app_address,
         is_active=True, 
         ck_crc32=False,
         ck_sha256=False,
@@ -107,6 +108,7 @@ class KbootConfigEntry:
             hex(self.app_address),
             self.app_size
         )
+
 
 class KbootConfigSector:
     def __init__(self,
@@ -282,10 +284,26 @@ if __name__ == '__main__':
         except: continue
         apps[name] = app
 
-    for name in [x[0] for x in config_tuples]:
-        if name in configs:
-            print('\nKbootConfigSector: {}, {}'.format(name, configs[name]))
+    print('\nConfigurations...')
+    for name in [x for x,y in config_tuples if x in configs]:
+        print('\n KbootConfigSector: {}, {}'.format(name, configs[name]))
 
-    for name in [x[0] for x in app_tuples]:
-        if name in apps:
-            print('\nKbootAppSector: {}, {}'.format(name, apps[name]))
+    print('\nKboot applications...')
+    for name in [x for x,y in app_tuples if x in apps]:
+        print('\n KbootAppSector: {}, {}'.format(name, apps[name]))
+
+    entries = []
+    for name in [x for x,y in app_tuples if x in apps and x.startswith('firmware')]:
+        entries.append(KbootConfigEntry(
+            apps[name].address,
+            is_active=True,
+            ck_crc32=True,
+            ck_sha256=True,
+            ck_size=True,
+            app_size=apps[name].app_size,
+            app_crc32=apps[name].app_crc32,
+            app_name=name
+        ))
+    new_config = KbootConfigSector(entries=entries)
+    print('\nSuggested KbootConfig: {}'.format(new_config))
+
