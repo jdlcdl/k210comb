@@ -23,6 +23,7 @@ We need to copy/paste the contents of `kboot_classes.py` into the k210 console.
 <summary>copy/paste this python code</summary>
 
 ```python
+
 '''
 classes to model Kboot bootloader, configuration, and application sectors
 
@@ -46,7 +47,8 @@ class KbootConstants:
 
 
 class KbootConfigEntry:
-    def __init__(self, app_address, 
+    def __init__(self,
+        app_address,
         is_active=True, 
         ck_crc32=False,
         ck_sha256=False,
@@ -132,6 +134,7 @@ class KbootConfigEntry:
             hex(self.app_address),
             self.app_size
         )
+
 
 class KbootConfigSector:
     def __init__(self,
@@ -307,13 +310,28 @@ if __name__ == '__main__':
         except: continue
         apps[name] = app
 
-    for name in [x[0] for x in config_tuples]:
-        if name in configs:
-            print('\nKbootConfigSector: {}, {}'.format(name, configs[name]))
+    print('\nConfigurations...')
+    for name in [x for x,y in config_tuples if x in configs]:
+        print('\n KbootConfigSector: {}, {}'.format(name, configs[name]))
 
-    for name in [x[0] for x in app_tuples]:
-        if name in apps:
-            print('\nKbootAppSector: {}, {}'.format(name, apps[name]))
+    print('\nKboot applications...')
+    for name in [x for x,y in app_tuples if x in apps]:
+        print('\n KbootAppSector: {}, {}'.format(name, apps[name]))
+
+    entries = []
+    for name in [x for x,y in app_tuples if x in apps and x.startswith('firmware')]:
+        entries.append(KbootConfigEntry(
+            apps[name].address,
+            is_active=True,
+            ck_crc32=True,
+            ck_sha256=True,
+            ck_size=True,
+            app_size=apps[name].app_size,
+            app_crc32=apps[name].app_crc32,
+            app_name=name
+        ))
+    new_config = KbootConfigSector(entries=entries)
+    print('\nSuggested KbootConfig: {}'.format(new_config))
 
 ```
 
@@ -334,33 +352,37 @@ to support all three firmwares above, but only the first boots by default.
 
 ```
 
-KbootConfigSector: main, config_flags: 00000000, user_data: 5aa5d0cf, entries:
+Configurations...
+
+ KbootConfigSector: main, config_flags: 00000000, user_data: 00000000, entries:
   latest flash: flags: active/NO-ck_crc32/ck_sha256/NO-ck_size, address: 0x80000, size: 16384
   krux v23.09.0: flags: active/ck_crc32/ck_sha256/ck_size, address: 0x280000, size: 1902592
   krux v22.08.2: flags: active/ck_crc32/ck_sha256/ck_size, address: 0x800000, size: 1716288
 
-KbootConfigSector: backup, config_flags: 00000000, user_data: 5aa5d0cf, entries:
-  latest flash: flags: active/NO-ck_crc32/ck_sha256/NO-ck_size, address: 0x80000, size: 16384
-  krux v23.09.0: flags: active/ck_crc32/ck_sha256/ck_size, address: 0x280000, size: 1902592
-  krux v22.08.2: flags: active/ck_crc32/ck_sha256/ck_size, address: 0x800000, size: 1716288
+ KbootConfigSector: backup, config_flags: 00000000, user_data: 5aa5d0cf, entries:
+  firmware: flags: active/NO-ck_crc32/ck_sha256/NO-ck_size, address: 0x80000, size: 1744896
 
-KbootAppSector: stage0, address: 0x0, sector_size: 0x1000, app_size: 608, crc32: 1848509717,
+Kboot applications...
+
+ KbootAppSector: stage0, address: 0x0, sector_size: 0x1000, app_size: 608, crc32: 1848509717,
   app_sha256: 2e050a92efdcb172cb5c6f7cb0b669ba654d2d20219f810fd9fc543f7ef05c3e
 
-KbootAppSector: stage1, address: 0x1000, sector_size: 0x2000, app_size: 8112, crc32: 3791469620,
-  app_sha256: 9b3103a822f809b50730eb866d0c2325c73eec5a2e6ea72bf5c94b250613ba53
+ KbootAppSector: stage1, address: 0x1000, sector_size: 0x2000, app_size: 8112, crc32: 2587156063,
+  app_sha256: f005f7c8b13aa2719cad58492a8432f14b68b2f845b58e5b5e81ed6309be6172
 
-KbootAppSector: firmware_slot1, address: 0x80000, sector_size: 0x1e0000, app_size: 1964672, crc32: 2001263661,
-  app_sha256: 51e4867e04edf169558cccd8d283b1c910411186af4440d34cec112574b60594
+ KbootAppSector: firmware_slot1, address: 0x80000, sector_size: 0x1e0000, app_size: 1965440, crc32,
+  app_sha256: f52c4d5584bdadfaf889edfee7e063064d4c0ae17afd68cfc7be4a33a0f8a3ae
 
-KbootAppSector: firmware_slot2, address: 0x280000, sector_size: 0x1e0000, app_size: 1902592, crc32: 2793990381,
+ KbootAppSector: firmware_slot2, address: 0x280000, sector_size: 0x1e0000, app_size: 1902592, crc3,
   app_sha256: 2da65b95435eff19a10fb0d88479bd7a7a86134577a972ab9012790dcac7e3c9
 
-KbootAppSector: firmware_slot3, address: 0x800000, sector_size: 0x1b0000, app_size: 1716288, crc32: 532489122,
+ KbootAppSector: firmware_slot3, address: 0x800000, sector_size: 0x1b0000, app_size: 1716288, crc3,
   app_sha256: 5067429beb16bd0eac55401ea673f55f9cc97585b1a0607d64f8e5f486d4988b
+
+Suggested KbootConfig: config_flags: 00000000, user_data: 00000000, entries:
+  firmware_slot1: flags: active/ck_crc32/ck_sha256/ck_size, address: 0x80000, size: 1965440
+  firmware_slot2: flags: active/ck_crc32/ck_sha256/ck_size, address: 0x280000, size: 1902592
+  firmware_slot3: flags: active/ck_crc32/ck_sha256/ck_size, address: 0x800000, size: 1716288
+
 >>>
 ```
-
----
-
-TODO: document how to use these classes for a custom configuration (or to fix a corrupted one).
