@@ -11,6 +11,7 @@ def crc32_flash(begin=0x00, length=2**24, block_size=2**12, verbose=False):
     if verbose:
         print('Calculating CRC32 for %s bytes of flash at %s...' % (length, hex(begin)), end='')
 
+    checksum = 0
     bytes_read = 0
     while bytes_read < length:
         if bytes_read + block_size < length:
