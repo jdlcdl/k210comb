@@ -11,6 +11,17 @@ that has been saved on another computer.
 
 ---
 
+## Enabling the python REPL in krux
+
+For security reasons, krux disables the python REPL so that if connected to a
+computer (bad habit!!!) which has been compromised, that computer will NOT be able to access the device or secrets that might be loaded in memory.
+
+To use the tools in this repo on a running krux device, you'll need to enable the following option in `krux/firmware/MaixPy/components/micropython/port/include/mpconfigport.h`, then rebuild the firmware.  You can then use the '-s' option with `ktool` to load the new firmware directly into sram and boot once -- without ever flashing the device.  Alternatively, developers may choose to flash the new firmware to their device -- to enable the REPL permanently.
+
+"#define MICROPY_ENABLE_COMPILER     (1)"
+
+---
+
 ## Tools in this repository
 
 The following tools may be copy/pasted into the k210 console w/`<CTRL>-e`, or they may be run on another computer
